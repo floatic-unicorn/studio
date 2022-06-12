@@ -2,9 +2,17 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
-import { DefaultButton } from "@fluentui/react";
 import CloseIcon from "@mui/icons-material/Close";
-import { IconButton, Typography, Link } from "@mui/material";
+import {
+  IconButton,
+  Typography,
+  Link,
+  Button,
+  ButtonProps,
+  ButtonBaseProps,
+  LinkProps,
+  styled as muiStyled,
+} from "@mui/material";
 import { makeStyles } from "@mui/styles";
 import cx from "classnames";
 import { useState, ReactElement } from "react";
@@ -45,6 +53,14 @@ const useStyles = makeStyles({
     top: 0,
   },
 });
+
+const ActionButton = muiStyled(Button)<ButtonProps & ButtonBaseProps & LinkProps>(() => ({
+  color: "white",
+  backgroundColor: "rgba(255,255, 255, 0.1)",
+  "&:hover": {
+    backgroundColor: "rgba(255,255, 255, 0.3)",
+  },
+}));
 
 const VersionBanner = function ({
   isChrome,
@@ -94,26 +110,14 @@ const VersionBanner = function ({
           </Typography>
         )}
 
-        <DefaultButton
+        <ActionButton
           href="https://www.google.com/chrome/"
           target="_blank"
           rel="noreferrer"
-          styles={{
-            root: {
-              color: "white",
-              backgroundColor: "rgba(255,255, 255, 0.1)",
-              borderRadius: "4px",
-              border: "1px solid rgba(255,255,255,0.3)",
-              fontSize: "1em",
-            },
-            rootHovered: {
-              color: "white",
-              backgroundColor: "rgba(255,255, 255, 0.3)",
-            },
-          }}
+          color="primary"
         >
           {fixText}
-        </DefaultButton>
+        </ActionButton>
       </div>
     </div>
   );
