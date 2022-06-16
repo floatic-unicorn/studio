@@ -41,7 +41,7 @@ const Root = muiStyled("div", {
 }));
 
 const DismissButton = muiStyled(IconButton)(({ theme }) => ({
-  position: "absolute !important" as unknown as "absolute",
+  position: "absolute",
   margin: theme.spacing(1),
   right: 0,
   top: 0,
