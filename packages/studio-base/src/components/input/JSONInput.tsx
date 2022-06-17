@@ -10,10 +10,9 @@
 //   This source code is licensed under the Apache License, Version 2.0,
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
-import { useTheme } from "@fluentui/react";
-import { useEffect, useRef, useState } from "react";
 
-import { LegacyInput } from "@foxglove/studio-base/components/LegacyStyledComponents";
+import { TextField, useTheme } from "@mui/material";
+import { useEffect, useRef, useState } from "react";
 
 const keyValMap: Record<string, number> = { ArrowDown: -1, ArrowUp: 1 };
 
@@ -50,11 +49,15 @@ export function JSONInput(props: {
   const parsedValue = parseJson(internalValue);
   const isValid = parsedValue != undefined;
   return (
-    <LegacyInput
-      style={{ color: isValid ? theme.semanticColors.inputText : theme.palette.red }}
+    <TextField
+      variant="filled"
       data-test={props.dataTest ?? "json-input"}
       type="text"
       value={internalValue}
+      size="small"
+      InputProps={{
+        style: { color: !isValid ? theme.palette.error.main : undefined },
+      }}
       onFocus={() => {
         editingRef.current = true;
       }}
