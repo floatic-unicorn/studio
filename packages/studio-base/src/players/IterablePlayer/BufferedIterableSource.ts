@@ -2,6 +2,8 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
+import { sortedIndexBy } from "lodash";
+
 import { signal, Signal } from "@foxglove/den/async";
 import Log from "@foxglove/log";
 import { subtract, add as addTime, Time, toNanoSec, compare } from "@foxglove/rostime";
@@ -26,6 +28,8 @@ class BufferedIterableSource {
   private writeSignal?: Signal<void>;
 
   // message records in a continuous array
+  // fixme - this should only have successful message events?
+  // what do we do with problems?
   private iteratorResults: IteratorResult[] = [];
 
   private active = false;
@@ -74,14 +78,49 @@ class BufferedIterableSource {
 
     try {
       this.readDone = false;
-      this.iteratorResults = [];
 
-      const sourceIterator = this.source.messageIterator(args);
+      // fixme - do not clear iteratorResults
+      //this.iteratorResults = [];
+
+      // where is the read cursor?
+
+      let startReadTime = args.start;
+
+      {
+        const lastResult = this.iteratorResults[this.iteratorResults.length - 1];
+        // fixme - this technically has us re-read the same time
+        if (lastResult?.msgEvent) {
+          startReadTime = lastResult.msgEvent.receiveTime;
+        }
+
+        console.log("start read time", startReadTime);
+      }
+
+      // fixme - if we are before the first message time, then we only need to read up to that time
+
+      // fixme - should only make this when we need to read past the last receive time and readUntil
+      const sourceIterator = this.source.messageIterator({
+        topics: args.topics,
+        start: startReadTime,
+      });
 
       for (;;) {
         if (this.aborted) {
           break;
         }
+
+        const lastResult = this.iteratorResults[this.iteratorResults.length - 1];
+
+        // If the last message we have has a receive time after readUntil, then there's no reading for us to do
+        // We wait until the readUntil moved forward
+        if (lastResult?.msgEvent && compare(lastResult.msgEvent.receiveTime, this.readUntil) >= 0) {
+          this.writeSignal = signal();
+          await this.writeSignal;
+          this.writeSignal = undefined;
+
+          continue;
+        }
+
         const result = await sourceIterator.next();
         if (result.done === true) {
           break;
@@ -128,11 +167,35 @@ class BufferedIterableSource {
       throw new Error("Invariant: BufferedIterableSource allows only one messageIterator");
     }
 
-    this.readUntil = addTime(args.start ?? this.initResult.start, { sec: 5, nsec: 0 });
+    const start = args.start ?? this.initResult.start;
+
+    this.readUntil = addTime(start, { sec: 5, nsec: 0 });
 
     this.aborted = false;
-    let readIdx = 0;
     this.activeLoader = this.start(args);
+
+    // binary search with a value and function to compare the value with the item values
+    const res: IteratorResult = {
+      connectionId: undefined,
+      problem: undefined,
+      msgEvent: {
+        topic: "",
+        receiveTime: start,
+        message: undefined,
+        sizeInBytes: 0,
+      },
+    };
+
+    console.log("first time", this.iteratorResults[0]?.msgEvent?.receiveTime);
+    console.log(
+      "last time",
+      this.iteratorResults[this.iteratorResults.length - 1]?.msgEvent?.receiveTime,
+    );
+
+    let readIdx = sortedIndexBy(this.iteratorResults, res, (result) =>
+      toNanoSec(result.msgEvent?.receiveTime),
+    );
+    console.log("starting read at index", readIdx);
 
     // Need to alias this for the generator function
     // eslint-disable-next-line @typescript-eslint/no-this-alias

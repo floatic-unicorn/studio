@@ -304,10 +304,8 @@ export class IterablePlayer implements Player {
   private _setState(newState: IterablePlayerState) {
     log.debug(`Set next state: ${newState}`);
     this._nextState = newState;
-    if (this._abort) {
-      this._abort.abort();
-      this._abort = undefined;
-    }
+    this._abort?.abort();
+    this._abort = undefined;
 
     // Support moving between idle (pause) and play and preserving the playback iterator
     if (newState !== "idle" && newState !== "play" && this._playbackIterator) {
@@ -778,26 +776,35 @@ export class IterablePlayer implements Player {
       log.info(`Block load took: ${performance.now() - start} ms`);
     }
 
-    // fixme - hack to get buffered range updates
-    for (;;) {
-      if (this._nextState) {
-        return;
-      }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
+    if (this._nextState) {
+      return;
+    }
 
+    if (this._abort) {
+      throw new Error("Invariant: some other abort controller exists");
+    }
+
+    const abort = (this._abort = new AbortController());
+
+    const aborted = new Promise<void>((resolve) => {
+      abort.signal.addEventListener("abort", () => {
+        resolve();
+      });
+    });
+
+    for (;;) {
       this._progress = {
         fullyLoadedFractionRanges: this._bufferedSource.loadedRanges(),
         messageCache: this._progress.messageCache,
       };
-
       await this._emitState();
 
+      await Promise.race([delay(1000), aborted]);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
       if (this._nextState) {
-        return;
+        break;
       }
-
-      // fixme - this is not good cause it delays main ui response when clicking the seek bar
-      // change to setInterval
-      await delay(1000);
     }
   }
 
