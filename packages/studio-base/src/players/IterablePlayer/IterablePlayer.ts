@@ -37,6 +37,7 @@ import delay from "@foxglove/studio-base/util/delay";
 import { SEEK_ON_START_NS, TimestampMethod } from "@foxglove/studio-base/util/time";
 
 import { BlockLoader } from "./BlockLoader";
+import { CachingIterableSource } from "./CachingIterableSource";
 import { IIterableSource, IteratorResult } from "./IIterableSource";
 
 const log = Log.getLogger(__filename);
@@ -152,6 +153,7 @@ export class IterablePlayer implements Player {
   private _problemManager = new PlayerProblemManager();
 
   private _iterableSource: IIterableSource;
+  private _cachingSource: CachingIterableSource;
 
   // Some states register an abort controller to signal they should abort
   private _abort?: AbortController;
@@ -167,6 +169,7 @@ export class IterablePlayer implements Player {
     const { metricsCollector, urlParams, source, name, enablePreload, sourceId } = options;
 
     this._iterableSource = source;
+    this._cachingSource = new CachingIterableSource(source);
     this._name = name;
     this._urlParams = urlParams;
     this._metricsCollector = metricsCollector ?? new NoopMetricsCollector();
@@ -470,7 +473,7 @@ export class IterablePlayer implements Player {
 
     // set the playIterator to the seek time
     log.debug("Initializing forward iterator from", next);
-    this._playbackIterator = this._iterableSource.messageIterator({
+    this._playbackIterator = this._cachingSource.messageIterator({
       topics: Array.from(this._allTopics),
       start: next,
     });
@@ -495,7 +498,7 @@ export class IterablePlayer implements Player {
     }
 
     log.debug("Initializing forward iterator from", this._start);
-    this._playbackIterator = this._iterableSource.messageIterator({
+    this._playbackIterator = this._cachingSource.messageIterator({
       topics: Array.from(this._allTopics),
       start: this._start,
     });
