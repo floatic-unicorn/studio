@@ -37,7 +37,7 @@ import delay from "@foxglove/studio-base/util/delay";
 import { SEEK_ON_START_NS, TimestampMethod } from "@foxglove/studio-base/util/time";
 
 import { BlockLoader } from "./BlockLoader";
-import { CachingIterableSource } from "./CachingIterableSource";
+import { BufferedIterableSource } from "./BufferedIterableSource";
 import { IIterableSource, IteratorResult } from "./IIterableSource";
 
 const log = Log.getLogger(__filename);
@@ -153,7 +153,7 @@ export class IterablePlayer implements Player {
   private _problemManager = new PlayerProblemManager();
 
   private _iterableSource: IIterableSource;
-  private _cachingSource: CachingIterableSource;
+  private _bufferedSource: BufferedIterableSource;
 
   // Some states register an abort controller to signal they should abort
   private _abort?: AbortController;
@@ -169,7 +169,7 @@ export class IterablePlayer implements Player {
     const { metricsCollector, urlParams, source, name, enablePreload, sourceId } = options;
 
     this._iterableSource = source;
-    this._cachingSource = new CachingIterableSource(source);
+    this._bufferedSource = new BufferedIterableSource(source);
     this._name = name;
     this._urlParams = urlParams;
     this._metricsCollector = metricsCollector ?? new NoopMetricsCollector();
@@ -396,7 +396,7 @@ export class IterablePlayer implements Player {
 
     try {
       const { start, end, topics, profile, topicStats, problems, publishersByTopic, datatypes } =
-        await this._iterableSource.initialize();
+        await this._bufferedSource.initialize();
 
       this._profile = profile;
       this._start = this._currentTime = start;
@@ -473,7 +473,8 @@ export class IterablePlayer implements Player {
 
     // set the playIterator to the seek time
     log.debug("Initializing forward iterator from", next);
-    this._playbackIterator = this._cachingSource.messageIterator({
+    await this._bufferedSource.stop();
+    this._playbackIterator = this._bufferedSource.messageIterator({
       topics: Array.from(this._allTopics),
       start: next,
     });
@@ -498,7 +499,7 @@ export class IterablePlayer implements Player {
     }
 
     log.debug("Initializing forward iterator from", this._start);
-    this._playbackIterator = this._cachingSource.messageIterator({
+    this._playbackIterator = this._bufferedSource.messageIterator({
       topics: Array.from(this._allTopics),
       start: this._start,
     });
@@ -776,6 +777,28 @@ export class IterablePlayer implements Player {
       await this.loadBlocks(this._currentTime);
       log.info(`Block load took: ${performance.now() - start} ms`);
     }
+
+    // fixme - hack to get buffered range updates
+    for (;;) {
+      if (this._nextState) {
+        return;
+      }
+
+      this._progress = {
+        fullyLoadedFractionRanges: this._bufferedSource.loadedRanges(),
+        messageCache: this._progress.messageCache,
+      };
+
+      await this._emitState();
+
+      if (this._nextState) {
+        return;
+      }
+
+      // fixme - this is not good cause it delays main ui response when clicking the seek bar
+      // change to setInterval
+      await delay(1000);
+    }
   }
 
   private async _statePlay() {
@@ -814,6 +837,13 @@ export class IterablePlayer implements Player {
         if (this._nextState) {
           return;
         }
+
+        // fixme - if we can't tick because we are still buffering, we need to indicate that
+        // maybe we need to query buffered source on some interval until we _can_ tick?
+        this._progress = {
+          fullyLoadedFractionRanges: this._bufferedSource.loadedRanges(),
+          messageCache: this._progress.messageCache,
+        };
 
         const time = Date.now() - start;
         // make sure we've slept at least 16 millis or so (aprox 1 frame)
@@ -860,7 +890,10 @@ export class IterablePlayer implements Player {
         abortSignal: this._abort.signal,
         startTime: time,
         progress: async (progress) => {
-          this._progress = progress;
+          this._progress = {
+            fullyLoadedFractionRanges: this._bufferedSource.loadedRanges(),
+            messageCache: progress.messageCache,
+          };
 
           // We throttle emitting the state since we could be loading blocks faster than 60fps and it
           // is actually slower to try rendering with each new block compared to spacing out the
