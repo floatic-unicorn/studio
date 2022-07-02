@@ -2,14 +2,16 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
-import { sortedIndexBy } from "lodash";
+import { sortedIndexBy, sortedLastIndexBy } from "lodash";
 
 import { signal, Signal } from "@foxglove/den/async";
 import Log from "@foxglove/log";
-import { subtract, add as addTime, Time, toNanoSec, compare } from "@foxglove/rostime";
+import { subtract, add as addTime, toNanoSec, compare } from "@foxglove/rostime";
+import { Time, MessageEvent } from "@foxglove/studio";
 import { Range } from "@foxglove/studio-base/util/ranges";
 
 import {
+  GetBackfillMessagesArgs,
   IIterableSource,
   Initalization,
   IteratorResult,
@@ -18,7 +20,7 @@ import {
 
 const log = Log.getLogger(__filename);
 
-class BufferedIterableSource {
+class BufferedIterableSource implements IIterableSource {
   private source: IIterableSource;
 
   private readDone = false;
@@ -159,6 +161,8 @@ class BufferedIterableSource {
   }
 
   messageIterator(args: MessageIteratorArgs): AsyncIterator<Readonly<IteratorResult>> {
+    // fixme - if the args.topics changes and we don't have these topics invalidate all our cache
+
     if (!this.initResult) {
       throw new Error("Invariant: uninitialized");
     }
@@ -185,12 +189,6 @@ class BufferedIterableSource {
         sizeInBytes: 0,
       },
     };
-
-    console.log("first time", this.iteratorResults[0]?.msgEvent?.receiveTime);
-    console.log(
-      "last time",
-      this.iteratorResults[this.iteratorResults.length - 1]?.msgEvent?.receiveTime,
-    );
 
     let readIdx = sortedIndexBy(this.iteratorResults, res, (result) =>
       toNanoSec(result.msgEvent?.receiveTime),
@@ -234,6 +232,56 @@ class BufferedIterableSource {
         await self.stop();
       }
     })();
+  }
+
+  async getBackfillMessages(args: GetBackfillMessagesArgs): Promise<MessageEvent<unknown>[]> {
+    if (!this.initResult) {
+      throw new Error("Invariant: uninitialized");
+    }
+
+    // binary search with a value and function to compare the value with the item values
+    const res: IteratorResult = {
+      connectionId: undefined,
+      problem: undefined,
+      msgEvent: {
+        topic: "",
+        receiveTime: args.time,
+        message: undefined,
+        sizeInBytes: 0,
+      },
+    };
+
+    const firstTime = this.iteratorResults[0]?.msgEvent?.receiveTime;
+
+    const readIdx = sortedLastIndexBy(this.iteratorResults, res, (result) =>
+      toNanoSec(result.msgEvent?.receiveTime),
+    );
+
+    const out: MessageEvent<unknown>[] = [];
+    const needsTopics = new Set(args.topics);
+
+    for (let i = readIdx; i >= 0; --i) {
+      const record = this.iteratorResults[i];
+      if (!record || !record.msgEvent) {
+        continue;
+      }
+
+      if (needsTopics.has(record.msgEvent.topic)) {
+        needsTopics.delete(record.msgEvent.topic);
+      }
+      out.push(record.msgEvent);
+    }
+
+    // If we found all our topics or if the first message is the start time then we are done
+    if (needsTopics.size === 0 || (firstTime && compare(this.initResult.start, firstTime) >= 0)) {
+      return out;
+    }
+
+    // fallback to the source for any topics we weren't able to load
+    return await this.source.getBackfillMessages({
+      ...args,
+      topics: Array.from(needsTopics),
+    });
   }
 }
 

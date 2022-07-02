@@ -571,7 +571,7 @@ export class IterablePlayer implements Player {
 
     try {
       this._abort = new AbortController();
-      const messages = await this._iterableSource.getBackfillMessages({
+      const messages = await this._bufferedSource.getBackfillMessages({
         topics,
         time: targetTime,
         abortSignal: this._abort.signal,
