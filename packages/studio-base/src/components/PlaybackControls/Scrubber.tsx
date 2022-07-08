@@ -100,7 +100,8 @@ const useStyles = makeStyles((theme) => ({
 const selectStartTime = (ctx: MessagePipelineContext) => ctx.playerState.activeData?.startTime;
 const selectCurrentTime = (ctx: MessagePipelineContext) => ctx.playerState.activeData?.currentTime;
 const selectEndTime = (ctx: MessagePipelineContext) => ctx.playerState.activeData?.endTime;
-const selectProgress = (ctx: MessagePipelineContext) => ctx.playerState.progress;
+const selectRanges = (ctx: MessagePipelineContext) =>
+  ctx.playerState.progress.fullyLoadedFractionRanges;
 
 type Props = {
   onSeek: (seekTo: Time) => void;
@@ -118,7 +119,7 @@ export default function Scrubber(props: Props): JSX.Element {
   const currentTime = useMessagePipeline(selectCurrentTime);
   const endTime = useMessagePipeline(selectEndTime);
 
-  const progress = useMessagePipeline(selectProgress);
+  const ranges = useMessagePipeline(selectRanges);
 
   const classes = useStyles();
   const setHoverValue = useSetHoverValue();
@@ -214,7 +215,7 @@ export default function Scrubber(props: Props): JSX.Element {
       {tooltip}
       <div className={cx(classes.fullWidthBar, { [classes.fullWidthBarActive]: startTime })} />
       <div className={classes.stateBar}>
-        <ProgressPlot progress={progress} />
+        <ProgressPlot availableRanges={ranges} />
       </div>
       <div ref={el} className={classes.sliderContainer}>
         <Slider

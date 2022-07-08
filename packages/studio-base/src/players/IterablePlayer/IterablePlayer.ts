@@ -441,7 +441,6 @@ export class IterablePlayer implements Player {
     } catch (error) {
       this._setError(`Error initializing: ${error.message}`, error);
     }
-
     await this._emitState();
     if (!this._hasError) {
       this._setState("start-delay");
@@ -482,6 +481,12 @@ export class IterablePlayer implements Player {
   // Without an initial read, the user would be looking at a blank layout since no messages have yet
   // been delivered.
   private async _stateStartPlay() {
+    this._presence = PlayerPresence.BUFFERING;
+    await this._emitState();
+    if (this._nextState) {
+      return;
+    }
+
     const stopTime = clampTime(
       add(this._start, fromNanoSec(SEEK_ON_START_NS)),
       this._start,
@@ -558,6 +563,7 @@ export class IterablePlayer implements Player {
     // If the backfill does not complete within 100 milliseconds, we emit a seek event with no messages.
     // This provides feedback to the user that we've acknowledged their seek request but haven't loaded the data.
     const seekAckTimeout = setTimeout(() => {
+      this._presence = PlayerPresence.BUFFERING;
       this._messages = [];
       this._currentTime = targetTime;
       this._lastSeekEmitTime = Date.now();
@@ -599,6 +605,7 @@ export class IterablePlayer implements Player {
 
     this._currentTime = targetTime;
     this._lastSeekEmitTime = Date.now();
+    this._presence = PlayerPresence.PRESENT;
     await this._emitState();
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
     if (this._nextState) {
@@ -725,6 +732,16 @@ export class IterablePlayer implements Player {
       this._lastMessage = undefined;
     }
 
+    let tickEmit: Promise<void> | undefined;
+
+    // fixme - if tick is taking too long we need to show a buffering indicator
+    // is it ok to make timeouts?
+    // fixme - how do we know how long to timeout for?
+    const tickTimeout = setTimeout(() => {
+      this._presence = PlayerPresence.BUFFERING;
+      tickEmit = this._emitState();
+    }, 100);
+
     // Read from the iterator through the end of the tick time
     for (;;) {
       if (!this._playbackIterator) {
@@ -753,12 +770,16 @@ export class IterablePlayer implements Player {
       msgEvents.push(iterResult.msgEvent);
     }
 
+    clearTimeout(tickTimeout);
+    await tickEmit;
+
     if (this._nextState) {
       return;
     }
 
     this._currentTime = end;
     this._messages = msgEvents;
+    this._presence = PlayerPresence.PRESENT;
     await this._emitState();
   }
 
@@ -776,6 +797,8 @@ export class IterablePlayer implements Player {
   }
 
   private async _statePlay() {
+    this._presence = PlayerPresence.PRESENT;
+
     if (!this._currentTime) {
       throw new Error("Invariant: currentTime not set before statePlay");
     }

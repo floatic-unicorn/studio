@@ -10,43 +10,77 @@
 //   This source code is licensed under the Apache License, Version 2.0,
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
-import { useTheme } from "@fluentui/react";
+import { styled, useTheme } from "@mui/material";
 import { complement } from "intervals-fn";
-import { useCallback } from "react";
+import { useMemo } from "react";
 
-import AutoSizingCanvas from "@foxglove/studio-base/components/AutoSizingCanvas";
-import { Progress } from "@foxglove/studio-base/players/types";
+import { Range } from "@foxglove/studio-base/util/ranges";
 
 const BAR_HEIGHT = 28;
-const LINE_START = 12;
-const LINE_HEIGHT = 4;
 
 type ProgressProps = {
-  progress: Progress;
+  availableRanges?: Range[];
 };
 
-export function ProgressPlot(props: ProgressProps): JSX.Element {
-  const { fullyLoadedFractionRanges } = props.progress;
-  const theme = useTheme();
-  const draw = useCallback(
-    (context: CanvasRenderingContext2D, width: number, height: number) => {
-      context.clearRect(0, 0, width, height);
-      if (fullyLoadedFractionRanges) {
-        context.fillStyle = theme.palette.neutralLight;
-        const invertedRanges = complement({ start: 0, end: 1 }, fullyLoadedFractionRanges);
-        for (const range of invertedRanges) {
-          const start = width * range.start;
-          const end = width * range.end;
-          context.fillRect(start, LINE_START, end - start, LINE_HEIGHT);
-        }
-      }
-    },
-    [fullyLoadedFractionRanges, theme.palette.neutralLight],
-  );
+/*
+const animatedBackground = keyframes`
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 18px 0;
+  }
+`;
+*/
 
-  return (
-    <div style={{ height: BAR_HEIGHT }}>
-      <AutoSizingCanvas draw={draw} />
-    </div>
-  );
+const AnimatedProgress = styled("div")(({ theme }) => ({
+  position: "absolute",
+  width: "100%",
+  height: "100%",
+  //animation: `${animatedBackground} 1s linear infinite`,
+  backgroundRepeat: "repeat-x",
+  backgroundSize: "100vw 100%",
+  backgroundColor: theme.palette.grey[400],
+  backgroundImage: `repeating-linear-gradient(${[
+    "90deg",
+    `${theme.palette.grey[300]}`,
+    `${theme.palette.grey[300]} 3px`,
+    `transparent 3px`,
+    `transparent 9px`,
+  ].join(",")})`,
+}));
+
+export function ProgressPlot(props: ProgressProps): JSX.Element {
+  const { availableRanges } = props;
+  const theme = useTheme();
+
+  const ranges = useMemo(() => {
+    if (!availableRanges) {
+      return <></>;
+    }
+
+    const mergedRanges = complement({ start: 0, end: 1 }, availableRanges);
+
+    return mergedRanges.map((range, idx) => {
+      const width = range.end - range.start;
+      if (width === 0) {
+        return <></>;
+      }
+
+      return (
+        <div
+          key={idx}
+          style={{
+            position: "absolute",
+            backgroundColor: theme.palette.grey[600],
+            left: `${range.start}%`,
+            width: `${width}%`,
+            height: "100%",
+          }}
+        />
+      );
+    });
+  }, [availableRanges, theme.palette.grey]);
+
+  return <div style={{ position: "relative", height: BAR_HEIGHT }}>{ranges}</div>;
 }

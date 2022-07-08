@@ -21,7 +21,7 @@ import {
   Previous20Filled,
   Previous20Regular,
 } from "@fluentui/react-icons";
-import { Divider, styled as muiStyled } from "@mui/material";
+import { CircularProgress, Divider, styled as muiStyled } from "@mui/material";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { compare, Time } from "@foxglove/rostime";
@@ -38,6 +38,7 @@ import {
 import PlaybackSpeedControls from "@foxglove/studio-base/components/PlaybackSpeedControls";
 import Stack from "@foxglove/studio-base/components/Stack";
 import { useAppConfigurationValue } from "@foxglove/studio-base/hooks/useAppConfigurationValue";
+import { PlayerPresence } from "@foxglove/studio-base/players/types";
 
 import PlaybackTimeDisplay from "./PlaybackTimeDisplay";
 import RepeatAdapter from "./RepeatAdapter";
@@ -102,6 +103,9 @@ export default function PlaybackControls({
       [pause],
     ),
   );
+
+  // fixme - stable selector
+  const presence = useMessagePipeline((ctx) => ctx.playerState.presence);
 
   const resumePlay = useCallback(() => {
     const { startTime: start, endTime: end, currentTime: current } = getTimeInfo();
@@ -204,10 +208,16 @@ export default function PlaybackControls({
               icon={repeat ? <LoopIcon strokeWidth={1.9375} /> : <LoopIcon strokeWidth={1.375} />}
               activeIcon={<LoopIcon strokeWidth={1.875} />}
             />
+            {presence === PlayerPresence.BUFFERING && <CircularProgress />}
             <HoverableIconButton
               title={isPlaying ? "Pause" : "Play"}
               onClick={isPlaying ? pause : resumePlay}
-              icon={isPlaying ? <Pause20Regular /> : <Play20Regular />}
+              //icon={isPlaying ? <Pause20Regular /> : <Play20Regular />}
+              icon={
+                <div>
+                  <CircularProgress />
+                </div>
+              }
               activeIcon={isPlaying ? <Pause20Filled /> : <Play20Filled />}
             />
           </Stack>
