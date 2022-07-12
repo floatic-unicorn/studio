@@ -183,6 +183,13 @@ export default function muiComponents(theme: Theme): ThemeOptions["components"] 
         },
       },
     },
+    MuiDialog: {
+      defaultProps: {
+        PaperProps: {
+          elevation: 0,
+        },
+      },
+    },
     MuiDialogActions: {
       styleOverrides: {
         root: {
