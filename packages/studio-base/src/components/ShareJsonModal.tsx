@@ -19,6 +19,7 @@ import {
 } from "@mui/material";
 import { useCallback, useMemo, useState } from "react";
 
+import HoverableIconButton from "@foxglove/studio-base/components/HoverableIconButton";
 import Stack from "@foxglove/studio-base/components/Stack";
 import clipboard from "@foxglove/studio-base/util/clipboard";
 import { downloadTextFile } from "@foxglove/studio-base/util/download";
@@ -114,25 +115,24 @@ export default function ShareJsonModal({
       </DialogContent>
       <DialogActions>
         <Stack direction="row" gap={1}>
-          <IconButton
-            onClick={handleDownload}
-            title="Download"
-            aria-label="Download"
-            color="primary"
-          >
+          <IconButton onClick={handleDownload} title="Download" aria-label="Download">
             <FileDownloadIcon />
           </IconButton>
           <IconButton
             onClick={handleCopy}
             title={copied ? "Copied" : "Copy to Clipboard"}
             aria-label={copied ? "Copied" : "Copy to Clipboard"}
-            color={copied ? "success" : "primary"}
+            color={copied ? "success" : "default"}
           >
             {copied ? <CheckIcon /> : <ContentCopyIcon />}
           </IconButton>
-          <IconButton onClick={() => setValue("{}")} title="Clear" aria-label="Clear" color="error">
-            <DeleteOutline />
-          </IconButton>
+          <HoverableIconButton
+            activeColor="error"
+            onClick={() => setValue("{}")}
+            title="Clear"
+            aria-label="Clear"
+            icon={<DeleteOutline />}
+          />
         </Stack>
 
         <Stack flex="auto" />
