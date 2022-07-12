@@ -10,19 +10,17 @@
 //   This source code is licensed under the Apache License, Version 2.0,
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
-import { styled, useTheme } from "@mui/material";
-import { complement } from "intervals-fn";
+import { keyframes, styled as muiStyled, useTheme } from "@mui/material";
+import { simplify } from "intervals-fn";
 import { useMemo } from "react";
 
 import { Range } from "@foxglove/studio-base/util/ranges";
 
-const BAR_HEIGHT = 28;
-
 type ProgressProps = {
+  loading: boolean;
   availableRanges?: Range[];
 };
 
-/*
 const animatedBackground = keyframes`
   0% {
     background-position: 0 0;
@@ -31,13 +29,12 @@ const animatedBackground = keyframes`
     background-position: 18px 0;
   }
 `;
-*/
 
-const AnimatedProgress = styled("div")(({ theme }) => ({
+const AnimatedProgress = muiStyled("div")(({ theme }) => ({
   position: "absolute",
   width: "100%",
   height: "100%",
-  //animation: `${animatedBackground} 1s linear infinite`,
+  animation: `${animatedBackground} 1s linear infinite`,
   backgroundRepeat: "repeat-x",
   backgroundSize: "100vw 100%",
   backgroundColor: theme.palette.grey[400],
@@ -51,7 +48,7 @@ const AnimatedProgress = styled("div")(({ theme }) => ({
 }));
 
 export function ProgressPlot(props: ProgressProps): JSX.Element {
-  const { availableRanges } = props;
+  const { availableRanges, loading } = props;
   const theme = useTheme();
 
   const ranges = useMemo(() => {
@@ -59,7 +56,7 @@ export function ProgressPlot(props: ProgressProps): JSX.Element {
       return <></>;
     }
 
-    const mergedRanges = complement({ start: 0, end: 1 }, availableRanges);
+    const mergedRanges = simplify(availableRanges);
 
     return mergedRanges.map((range, idx) => {
       const width = range.end - range.start;
@@ -73,8 +70,8 @@ export function ProgressPlot(props: ProgressProps): JSX.Element {
           style={{
             position: "absolute",
             backgroundColor: theme.palette.grey[600],
-            left: `${range.start}%`,
-            width: `${width}%`,
+            left: `${range.start * 100}%`,
+            width: `${width * 100}%`,
             height: "100%",
           }}
         />
@@ -82,5 +79,10 @@ export function ProgressPlot(props: ProgressProps): JSX.Element {
     });
   }, [availableRanges, theme.palette.grey]);
 
-  return <div style={{ position: "relative", height: BAR_HEIGHT }}>{ranges}</div>;
+  return (
+    <div style={{ position: "relative", height: "100%" }}>
+      {loading && <AnimatedProgress />}
+      {ranges}
+    </div>
+  );
 }

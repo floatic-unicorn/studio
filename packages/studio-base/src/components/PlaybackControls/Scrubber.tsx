@@ -19,6 +19,7 @@ import {
   useSetHoverValue,
 } from "@foxglove/studio-base/context/HoverValueContext";
 import { useAppTimeFormat } from "@foxglove/studio-base/hooks";
+import { PlayerPresence } from "@foxglove/studio-base/players/types";
 import { fonts } from "@foxglove/studio-base/util/sharedStyleConstants";
 
 import PlaybackBarHoverTicks from "./PlaybackBarHoverTicks";
@@ -66,13 +67,7 @@ const useStyles = makeStyles((theme) => ({
     zIndex: 1,
     flex: 1,
     width: "100%",
-    height: "100%",
-
-    "& canvas": {
-      minWidth: "100%",
-      minHeight: "100%",
-      flex: "1 0 100%",
-    },
+    height: "4px",
   },
   tooltip: {
     fontFamily: fonts.SANS_SERIF,
@@ -102,6 +97,7 @@ const selectCurrentTime = (ctx: MessagePipelineContext) => ctx.playerState.activ
 const selectEndTime = (ctx: MessagePipelineContext) => ctx.playerState.activeData?.endTime;
 const selectRanges = (ctx: MessagePipelineContext) =>
   ctx.playerState.progress.fullyLoadedFractionRanges;
+const selectPrecense = (ctx: MessagePipelineContext) => ctx.playerState.presence;
 
 type Props = {
   onSeek: (seekTo: Time) => void;
@@ -118,7 +114,7 @@ export default function Scrubber(props: Props): JSX.Element {
   const startTime = useMessagePipeline(selectStartTime);
   const currentTime = useMessagePipeline(selectCurrentTime);
   const endTime = useMessagePipeline(selectEndTime);
-
+  const presence = useMessagePipeline(selectPrecense);
   const ranges = useMessagePipeline(selectRanges);
 
   const classes = useStyles();
@@ -210,12 +206,14 @@ export default function Scrubber(props: Props): JSX.Element {
   const value = currentTime == undefined ? undefined : toSec(currentTime);
   const step = ((max ?? 100) - (min ?? 0)) / 500;
 
+  const loading = presence === PlayerPresence.INITIALIZING || presence === PlayerPresence.BUFFERING;
+
   return (
     <div className={classes.root}>
       {tooltip}
       <div className={cx(classes.fullWidthBar, { [classes.fullWidthBarActive]: startTime })} />
       <div className={classes.stateBar}>
-        <ProgressPlot availableRanges={ranges} />
+        <ProgressPlot loading={loading} availableRanges={ranges} />
       </div>
       <div ref={el} className={classes.sliderContainer}>
         <Slider
