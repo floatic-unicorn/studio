@@ -108,7 +108,9 @@ export default function ShareJsonModal({
           onChange={(event) => setValue(event.target.value)}
           autoFocus
           error={error != undefined}
-          helperText={error && "The JSON provided is invalid."}
+          helperText={
+            error ? "The JSON provided is invalid." : " " // pass whitespace to prevent height from jumping
+          }
           FormHelperTextProps={{ variant: "standard" }}
           spellCheck={false}
         />
