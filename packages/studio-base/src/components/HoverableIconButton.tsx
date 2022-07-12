@@ -13,20 +13,32 @@ type Props = {
 } & Omit<IconButtonProps, "children" | "color">;
 
 const HoverableIconButton = forwardRef<HTMLButtonElement, Props>((props, ref) => {
-  const { icon, activeIcon, color, activeColor, ...rest } = props;
+  const { icon, activeIcon, color, activeColor, onMouseLeave, onMouseEnter, ...rest } = props;
 
   const [hovered, setHovered] = useState(false);
 
-  const onMouseOver = useCallback(() => {
-    if (props.disabled === true) {
-      return;
-    }
-    setHovered(true);
-  }, [props.disabled]);
+  const handleMouseEnter = useCallback(
+    (event) => {
+      if (onMouseEnter != undefined) {
+        onMouseEnter(event);
+      }
+      if (props.disabled === true) {
+        return;
+      }
+      setHovered(true);
+    },
+    [onMouseEnter, props.disabled],
+  );
 
-  const onMouseLeave = useCallback(() => {
-    setHovered(false);
-  }, []);
+  const handleMouseLeave = useCallback(
+    (event) => {
+      if (onMouseLeave != undefined) {
+        onMouseLeave(event);
+      }
+      setHovered(false);
+    },
+    [onMouseLeave],
+  );
 
   useEffect(() => {
     if (props.disabled === true) {
@@ -39,8 +51,8 @@ const HoverableIconButton = forwardRef<HTMLButtonElement, Props>((props, ref) =>
       ref={ref}
       {...rest}
       component="button"
-      onMouseEnter={onMouseOver}
-      onMouseLeave={onMouseLeave}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       color={activeColor != undefined ? (hovered ? activeColor : color) : color}
     >
       {activeIcon != undefined ? (hovered ? activeIcon : icon) : icon}
