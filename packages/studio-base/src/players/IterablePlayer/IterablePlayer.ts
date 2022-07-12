@@ -481,6 +481,7 @@ export class IterablePlayer implements Player {
   // Without an initial read, the user would be looking at a blank layout since no messages have yet
   // been delivered.
   private async _stateStartPlay() {
+    // Indicate the player is buffering
     this._presence = PlayerPresence.BUFFERING;
     await this._emitState();
     if (this._nextState) {
@@ -518,6 +519,9 @@ export class IterablePlayer implements Player {
       const iterResult = result.value;
       // Bail if a new state is requested while we are loading messages
       // This usually happens when seeking before the initial load is complete
+
+      // Eslint doesn't understand that this._nextState could change
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
       if (this._nextState) {
         return;
       }
@@ -539,6 +543,9 @@ export class IterablePlayer implements Player {
     this._messages = messageEvents;
     this._presence = PlayerPresence.PRESENT;
     await this._emitState();
+
+    // Eslint doesn't understand that this._nextState could change
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
     if (this._nextState) {
       return;
     }
@@ -732,46 +739,50 @@ export class IterablePlayer implements Player {
       this._lastMessage = undefined;
     }
 
+    // If we take too long to read the tick data, we set the player into a BUFFERING presence. This
+    // indicates that the player is waiting to load more data. When the tick finally finishes, we
+    // clear this timeout.
     let tickEmit: Promise<void> | undefined;
-
-    // fixme - if tick is taking too long we need to show a buffering indicator
-    // is it ok to make timeouts?
-    // fixme - how do we know how long to timeout for?
     const tickTimeout = setTimeout(() => {
       this._presence = PlayerPresence.BUFFERING;
       tickEmit = this._emitState();
     }, 100);
 
-    // Read from the iterator through the end of the tick time
-    for (;;) {
-      if (!this._playbackIterator) {
-        break;
-      }
+    try {
+      // Read from the iterator through the end of the tick time
+      for (;;) {
+        if (!this._playbackIterator) {
+          break;
+        }
 
-      const result = await this._playbackIterator.next();
-      if (result.done === true || this._nextState) {
-        break;
-      }
-      const iterResult = result.value;
-      if (iterResult.problem) {
-        this._problemManager.addProblem(`connid-${iterResult.connectionId}`, iterResult.problem);
-      }
+        const result = await this._playbackIterator.next();
+        if (result.done === true || this._nextState) {
+          break;
+        }
+        const iterResult = result.value;
+        if (iterResult.problem) {
+          this._problemManager.addProblem(`connid-${iterResult.connectionId}`, iterResult.problem);
+        }
 
-      if (iterResult.problem) {
-        continue;
-      }
+        if (iterResult.problem) {
+          continue;
+        }
 
-      // The message is past the tick end time, we need to save it for next tick
-      if (compare(iterResult.msgEvent.receiveTime, end) > 0) {
-        this._lastMessage = iterResult.msgEvent;
-        break;
-      }
+        // The message is past the tick end time, we need to save it for next tick
+        if (compare(iterResult.msgEvent.receiveTime, end) > 0) {
+          this._lastMessage = iterResult.msgEvent;
+          break;
+        }
 
-      msgEvents.push(iterResult.msgEvent);
+        msgEvents.push(iterResult.msgEvent);
+      }
+    } finally {
+      clearTimeout(tickTimeout);
+      await tickEmit;
     }
 
-    clearTimeout(tickTimeout);
-    await tickEmit;
+    // Set the presence back to PRESENT since we are no longer buffering
+    this._presence = PlayerPresence.PRESENT;
 
     if (this._nextState) {
       return;
@@ -779,11 +790,11 @@ export class IterablePlayer implements Player {
 
     this._currentTime = end;
     this._messages = msgEvents;
-    this._presence = PlayerPresence.PRESENT;
     await this._emitState();
   }
 
   private async _stateIdle() {
+    this._presence = PlayerPresence.PRESENT;
     await this._emitState();
     if (this._nextState) {
       return;
