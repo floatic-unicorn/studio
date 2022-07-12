@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from "uuid";
 import Logger from "@foxglove/log";
 import { CameraState } from "@foxglove/regl-worldview";
 import { toNanoSec } from "@foxglove/rostime";
+import type { FrameTransform } from "@foxglove/schemas/schemas/typescript";
 import {
   MessageEvent,
   SettingsIcon,
@@ -19,9 +20,10 @@ import {
   SettingsTreeNodes,
   Topic,
 } from "@foxglove/studio";
+import { fonts } from "@foxglove/studio-base/util/sharedStyleConstants";
+import { LabelPool } from "@foxglove/three-text";
 
 import { Input } from "./Input";
-import { Labels } from "./Labels";
 import { LineMaterial } from "./LineMaterial";
 import { ModelCache } from "./ModelCache";
 import { Picker } from "./Picker";
@@ -30,8 +32,13 @@ import { SceneExtension } from "./SceneExtension";
 import { ScreenOverlay } from "./ScreenOverlay";
 import { SettingsManager, SettingsTreeEntry } from "./SettingsManager";
 import { stringToRgb } from "./color";
+import { FRAME_TRANSFORM_DATATYPES } from "./foxglove";
 import { DetailLevel, msaaSamples } from "./lod";
-import { normalizeTFMessage, normalizeTransformStamped } from "./normalizeMessages";
+import {
+  normalizeFrameTransform,
+  normalizeTFMessage,
+  normalizeTransformStamped,
+} from "./normalizeMessages";
 import { Cameras } from "./renderables/Cameras";
 import { CoreSettings } from "./renderables/CoreSettings";
 import { FrameAxes, LayerSettingsTransform } from "./renderables/FrameAxes";
@@ -46,13 +53,15 @@ import { Poses } from "./renderables/Poses";
 import { MarkerPool } from "./renderables/markers/MarkerPool";
 import {
   Header,
+  Quaternion,
   TFMessage,
   TF_DATATYPES,
   TransformStamped,
   TRANSFORM_STAMPED_DATATYPES,
+  Vector3,
 } from "./ros";
 import { BaseSettings, CustomLayerSettings, SelectEntry } from "./settings";
-import { MAX_DURATION, Transform, TransformTree } from "./transforms";
+import { Transform, TransformTree } from "./transforms";
 
 const log = Logger.getLogger(__filename);
 
@@ -76,16 +85,15 @@ export type RendererConfig = {
     enableStats?: boolean;
     /** Background color override for the scene, sent to `glClearColor()` */
     backgroundColor?: string;
-    /**
-     * Controls the size of labels by setting the pixel density per unit of
-     * world space (usually meters)
-     */
-    labelPixelsPerUnit?: number;
+    /* Scale factor to apply to all labels */
+    labelScaleFactor?: number;
     transforms?: {
       /** Toggles visibility of all transforms */
       visible?: boolean;
       /** Toggles visibility of frame axis labels */
       showLabel?: boolean;
+      /** Size of frame axis labels */
+      labelSize?: number;
       /** Size of coordinate frame axes */
       axisScale?: number;
       /** Width of the connecting line between child and parent frames */
@@ -93,6 +101,8 @@ export type RendererConfig = {
       /** Color of the connecting line between child and parent frames */
       lineColor?: string;
     };
+    /** Toggles visibility of all topics */
+    topicsVisible?: boolean;
   };
   /** frameId -> settings */
   transforms: Record<string, Partial<LayerSettingsTransform> | undefined>;
@@ -182,15 +192,17 @@ export class Renderer extends EventEmitter<RendererEvents> {
   selectedObject: Renderable | undefined;
   colorScheme: "dark" | "light" = "light";
   modelCache: ModelCache;
-  transformTree = new TransformTree(MAX_DURATION);
+  transformTree = new TransformTree();
   coordinateFrameList: SelectEntry[] = [];
-  currentTime: bigint | undefined;
+  currentTime = 0n;
   fixedFrameId: string | undefined;
   renderFrameId: string | undefined;
   followFrameId: string | undefined;
 
-  labels = new Labels(this);
+  labelPool = new LabelPool({ fontFamily: fonts.MONOSPACE });
   markerPool = new MarkerPool(this);
+
+  private _prevResolution = new THREE.Vector2();
 
   constructor(canvas: HTMLCanvasElement, config: RendererConfig) {
     super();
@@ -198,15 +210,17 @@ export class Renderer extends EventEmitter<RendererEvents> {
     // NOTE: Global side effect
     THREE.Object3D.DefaultUp = new THREE.Vector3(0, 0, 1);
 
+    this.canvas = canvas;
+    this.config = config;
+
     this.settings = new SettingsManager(baseSettingsTree());
     this.settings.on("update", () => this.emit("settingsTreeChange", this));
     // Add the "Custom Layers" node first so merging happens in the correct order.
     // Another approach would be to modify SettingsManager to allow merging parent
     // nodes in after their children
     this.settings.setNodesForKey(CUSTOM_LAYERS_ID, []);
+    this.updateCustomLayersCount();
 
-    this.canvas = canvas;
-    this.config = config;
     this.gl = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
@@ -238,7 +252,6 @@ export class Renderer extends EventEmitter<RendererEvents> {
     });
 
     this.scene = new THREE.Scene();
-    this.scene.add(this.labels);
 
     this.dirLight = new THREE.DirectionalLight();
     this.dirLight.position.set(1, 1, 1);
@@ -272,7 +285,7 @@ export class Renderer extends EventEmitter<RendererEvents> {
 
     this.followFrameId = config.followTf;
 
-    const samples = msaaSamples(this.maxLod, this.gl.capabilities);
+    const samples = msaaSamples(this.gl.capabilities);
     const renderSize = this.gl.getDrawingBufferSize(tempVec2);
     this.aspect = renderSize.width / renderSize.height;
     log.debug(`Initialized ${renderSize.width}x${renderSize.height} renderer (${samples}x MSAA)`);
@@ -315,8 +328,8 @@ export class Renderer extends EventEmitter<RendererEvents> {
     }
     this.sceneExtensions.clear();
 
+    this.labelPool.dispose();
     this.markerPool.dispose();
-    this.labels.dispose();
     this.picker.dispose();
     this.input.dispose();
     this.gl.dispose();
@@ -385,18 +398,16 @@ export class Renderer extends EventEmitter<RendererEvents> {
     };
     this.customLayerActions.set(options.layerId, { action, handler });
 
+    const layerCount = Object.keys(this.config.layers).length;
+    const label = `Custom Layers${layerCount > 0 ? ` (${layerCount})` : ""}`;
+
     // Rebuild the "Custom Layers" settings tree node
     const actions: SettingsTreeNodeActionItem[] = Array.from(this.customLayerActions.values()).map(
       (entry) => entry.action,
     );
     const entry: SettingsTreeEntry = {
       path: ["layers"],
-      node: {
-        label: "Custom Layers",
-        defaultExpansionState: "expanded",
-        actions,
-        handler: this.handleCustomLayersAction,
-      },
+      node: { label, actions, handler: this.handleCustomLayersAction },
     };
     this.settings.setNodesForKey(CUSTOM_LAYERS_ID, [entry]);
   }
@@ -441,8 +452,6 @@ export class Renderer extends EventEmitter<RendererEvents> {
       extension.setColorScheme(colorScheme, bgColor);
     }
 
-    this.labels.setColorScheme(colorScheme, bgColor);
-
     if (colorScheme === "dark") {
       this.gl.setClearColor(bgColor ?? DARK_BACKDROP);
       this.outlineMaterial.color.set(DARK_OUTLINE);
@@ -467,7 +476,24 @@ export class Renderer extends EventEmitter<RendererEvents> {
       for (const extension of this.sceneExtensions.values()) {
         this.settings.setNodesForKey(extension.extensionId, extension.settingsNodes());
       }
+
+      // Update the Topics node label
+      const topicCount = this.topics?.length ?? 0;
+      const topicsNode = this.settings.tree()["topics"];
+      const vizCount = Object.keys(topicsNode?.children ?? {}).length;
+
+      if (topicCount === 0 && vizCount === 0) {
+        this.settings.setLabel(["topics"], `Topics`);
+      } else {
+        this.settings.setLabel(["topics"], `Topics (${vizCount}/${topicCount})`);
+      }
     }
+  }
+
+  updateCustomLayersCount(): void {
+    const layerCount = Object.keys(this.config.layers).length;
+    const label = `Custom Layers${layerCount > 0 ? ` (${layerCount})` : ""}`;
+    this.settings.setLabel(["layers"], label);
   }
 
   /** Translate a @foxglove/regl-worldview CameraState to the three.js coordinate system */
@@ -532,7 +558,17 @@ export class Renderer extends EventEmitter<RendererEvents> {
       this.addCoordinateFrame(frameId);
     }
 
-    if (TF_DATATYPES.has(datatype)) {
+    // If this message has a top-level frame_id, scrape it
+    const maybeHasFrameId = message as Partial<{ frame_id: string }>;
+    if (typeof maybeHasFrameId.frame_id === "string") {
+      this.addCoordinateFrame(maybeHasFrameId.frame_id);
+    }
+
+    if (FRAME_TRANSFORM_DATATYPES.has(datatype)) {
+      // foxglove.FrameTransform - Ingest the list of transforms into our TF tree
+      const transform = normalizeFrameTransform(message as DeepPartial<FrameTransform>);
+      this.addFrameTransform(transform);
+    } else if (TF_DATATYPES.has(datatype)) {
       // tf2_msgs/TFMessage - Ingest the list of transforms into our TF tree
       const tfMessage = normalizeTFMessage(message as DeepPartial<TFMessage>);
       for (const tf of tfMessage.transforms) {
@@ -575,31 +611,47 @@ export class Renderer extends EventEmitter<RendererEvents> {
     }
   }
 
+  addFrameTransform(transform: FrameTransform): void {
+    const parentId = transform.parent_frame_id;
+    const childId = transform.child_frame_id;
+    // The docs at <https://foxglove.dev/docs/studio/messages/frame-transform>
+    // describe `transform.timestamp` as "Timestamp of transform" and
+    // `transform.transform.timestamp` as "Transform time". We choose the
+    // top-level timestamp for now until the ambiguity is resolved. See
+    // <https://github.com/foxglove/schemas/issues/45>
+    const stamp = toNanoSec(transform.timestamp);
+    const t = transform.transform.translation;
+    const q = transform.transform.rotation;
+
+    this.addTransform(parentId, childId, stamp, t, q);
+  }
+
   addTransformMessage(tf: TransformStamped): void {
     const normalizedParentId = this.normalizeFrameId(tf.header.frame_id);
     const normalizedChildId = this.normalizeFrameId(tf.child_frame_id);
-    const addParent = !this.transformTree.hasFrame(normalizedParentId);
-    const addChild = !this.transformTree.hasFrame(normalizedChildId);
-
-    // Create a new transform and add it to the renderer's TransformTree
     const stamp = toNanoSec(tf.header.stamp);
     const t = tf.transform.translation;
     const q = tf.transform.rotation;
-    const transform = new Transform([t.x, t.y, t.z], [q.x, q.y, q.z, q.w]);
-    const updated = this.transformTree.addTransform(
-      normalizedChildId,
-      normalizedParentId,
-      stamp,
-      transform,
-    );
 
-    if (addParent || addChild) {
+    this.addTransform(normalizedParentId, normalizedChildId, stamp, t, q);
+  }
+
+  // Create a new transform and add it to the renderer's TransformTree
+  addTransform(
+    parentFrameId: string,
+    childFrameId: string,
+    stamp: bigint,
+    translation: Vector3,
+    rotation: Quaternion,
+  ): void {
+    const t = translation;
+    const q = rotation;
+
+    const transform = new Transform([t.x, t.y, t.z], [q.x, q.y, q.z, q.w]);
+    const updated = this.transformTree.addTransform(childFrameId, parentFrameId, stamp, transform);
+
+    if (updated) {
       this.coordinateFrameList = this.transformTree.frameList();
-      // log.debug(`Added transform "${normalizedParentId}_T_${normalizedChildId}"`);
-      this.emit("transformTreeUpdated", this);
-    } else if (updated) {
-      this.coordinateFrameList = this.transformTree.frameList();
-      // log.debug(`Updated transform "${normalizedParentId}_T_${normalizedChildId}"`);
       this.emit("transformTreeUpdated", this);
     }
   }
@@ -607,9 +659,7 @@ export class Renderer extends EventEmitter<RendererEvents> {
   // Callback handlers
 
   animationFrame = (): void => {
-    if (this.currentTime != undefined) {
-      this.frameHandler(this.currentTime);
-    }
+    this.frameHandler(this.currentTime);
   };
 
   frameHandler = (currentTime: bigint): void => {
@@ -617,7 +667,7 @@ export class Renderer extends EventEmitter<RendererEvents> {
     this.emit("startFrame", currentTime, this);
 
     this._updateFrames();
-    this._updateMaterials(this.input.canvasSize);
+    this._updateResolution();
 
     this.gl.clear();
     camera.layers.set(LAYER_DEFAULT);
@@ -745,6 +795,9 @@ export class Renderer extends EventEmitter<RendererEvents> {
 
     // Trigger the add custom layer action handler
     entry.handler(instanceId);
+
+    // Update the Custom Layers node label with the number of custom layers
+    this.updateCustomLayersCount();
   };
 
   private _updateFrames(): void {
@@ -769,6 +822,7 @@ export class Renderer extends EventEmitter<RendererEvents> {
         return;
       } else {
         log.debug(`Setting render frame to ${this.renderFrameId}`);
+        this.settings.errors.remove(FOLLOW_TF_PATH, NO_FRAME_SELECTED);
       }
     }
 
@@ -782,6 +836,8 @@ export class Renderer extends EventEmitter<RendererEvents> {
         `Frame "${this.renderFrameId}" not found`,
       );
       return;
+    } else {
+      this.settings.errors.remove(FOLLOW_TF_PATH, FRAME_NOT_FOUND);
     }
 
     const rootFrameId = frame.root().id;
@@ -794,22 +850,34 @@ export class Renderer extends EventEmitter<RendererEvents> {
       this.fixedFrameId = rootFrameId;
     }
 
-    this.settings.errors.clearPath(FOLLOW_TF_PATH);
+    if (this.followFrameId != undefined && this.renderFrameId !== this.followFrameId) {
+      this.settings.errors.add(
+        FOLLOW_TF_PATH,
+        FRAME_NOT_FOUND,
+        `Frame "${this.followFrameId}" not found, rendering in "${this.renderFrameId}"`,
+      );
+    } else {
+      this.settings.errors.clearPath(FOLLOW_TF_PATH);
+    }
   }
 
-  private _updateMaterials(resolution: THREE.Vector2): void {
+  private _updateResolution(): void {
+    const resolution = this.input.canvasSize;
+    if (this._prevResolution.equals(resolution)) {
+      return;
+    }
+    this._prevResolution.copy(resolution);
+
     this.scene.traverse((object) => {
-      if ((object as Partial<THREE.Mesh>).isMesh) {
+      if ((object as Partial<THREE.Mesh>).material) {
         const mesh = object as THREE.Mesh;
-        const material = mesh.material as THREE.Material;
+        const material = mesh.material as Partial<LineMaterial>;
 
         // Update render resolution uniforms
-        if (material instanceof LineMaterial) {
-          material.resolution = resolution;
-        } else if (
-          material instanceof THREE.ShaderMaterial &&
-          material.uniforms.resolution != undefined
-        ) {
+        if (material.resolution) {
+          material.resolution.copy(resolution);
+        }
+        if (material.uniforms?.resolution) {
           material.uniforms.resolution.value = resolution;
         }
       }

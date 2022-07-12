@@ -1,6 +1,6 @@
 {
   "name": "@foxglove/studio-base",
-  "version": "1.16.0-dev",
+  "version": "1.17.1-dev",
   "description": "Core components of Foxglove Studio",
   "license": "MPL-2.0",
   "repository": {
@@ -48,6 +48,7 @@
     "@foxglove/rostime": "1.1.2",
     "@foxglove/schemas": "0.2.0",
     "@foxglove/studio": "workspace:*",
+    "@foxglove/three-text": "workspace:*",
     "@foxglove/ulog": "2.1.2",
     "@foxglove/velodyne-cloud": "1.0.1",
     "@foxglove/wasm-bz2": "0.1.0",
@@ -143,7 +144,7 @@
     "lodash": "4.17.21",
     "mathjs": "10.1.1",
     "memoize-weak": "1.0.2",
-    "moment": "2.29.2",
+    "moment": "2.29.4",
     "moment-duration-format": "2.3.2",
     "moment-timezone": "0.5.34",
     "monaco-editor": "0.30.1",
