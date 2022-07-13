@@ -2,9 +2,8 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
-import { makeStyles } from "@fluentui/react";
-import cx from "classnames";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { styled as muiStyled, Typography } from "@mui/material";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useLatest } from "react-use";
 import { v4 as uuidv4 } from "uuid";
 
@@ -13,6 +12,7 @@ import {
   MessagePipelineContext,
   useMessagePipeline,
 } from "@foxglove/studio-base/components/MessagePipeline";
+import Stack from "@foxglove/studio-base/components/Stack";
 import { useTooltip } from "@foxglove/studio-base/components/Tooltip";
 import {
   useClearHoverValue,
@@ -26,70 +26,38 @@ import PlaybackBarHoverTicks from "./PlaybackBarHoverTicks";
 import { ProgressPlot } from "./ProgressPlot";
 import Slider from "./Slider";
 
-const useStyles = makeStyles((theme) => ({
-  root: {
-    display: "flex",
-    flexGrow: 1,
-    alignItems: "center",
-    height: 28,
-    position: "relative",
-  },
-  fullWidthBar: {
-    position: "absolute",
-    top: "12px",
-    left: "0",
-    right: "0",
-    height: "4px",
-    backgroundColor: theme.palette.neutralLighterAlt,
-  },
-  fullWidthBarActive: {
-    backgroundColor: theme.palette.neutralQuaternary,
-  },
-  marker: {
-    backgroundColor: "white",
-    position: "absolute",
-    height: "36%",
-    border: `1px solid ${theme.semanticColors.bodyText}`,
-    width: "2px",
-    top: "32%",
-  },
-  sliderContainer: {
-    position: "absolute",
-    zIndex: "2",
-    flex: "1",
-    width: "100%",
-    height: "100%",
-  },
-  stateBar: {
-    display: "flex",
-    flexDirection: "column",
-    position: "absolute",
-    zIndex: 1,
-    flex: 1,
-    width: "100%",
-    height: "4px",
-  },
-  tooltip: {
-    fontFamily: fonts.SANS_SERIF,
-    whiteSpace: "nowrap",
-  },
-  tooltipRow: {
-    paddingBottom: theme.spacing.s2,
+const TooltipWrapper = muiStyled("div")(({ theme }) => ({
+  fontFeatureSettings: `${fonts.SANS_SERIF_FEATURE_SETTINGS}, "zero"`,
+  fontFamily: fonts.SANS_SERIF,
+  whiteSpace: "nowrap",
+  gap: theme.spacing(0.5),
+  display: "grid",
+  gridTemplateColumns: "minmax(max-content, 50px) 1fr",
+  flexDirection: "column",
+}));
 
-    "&:last-child": {
-      paddingBottom: 0,
-    },
-  },
-  tooltipTitle: {
-    width: "50px",
-    textAlign: "right",
-    marginRight: theme.spacing.s2,
-    display: "inline-block",
-  },
-  tooltipValue: {
-    fontFeatureSettings: `${fonts.SANS_SERIF_FEATURE_SETTINGS}, "zero"`,
-    opacity: 0.7,
-  },
+const Marker = muiStyled("div")(({ theme }) => ({
+  backgroundColor: theme.palette.text.primary,
+  position: "absolute",
+  height: 12,
+  width: 2,
+  transform: "translate(-50%, 0)",
+}));
+
+const ScrubberTrack = muiStyled("div", {
+  shouldForwardProp: (prop) => prop !== "active",
+})<{ active?: boolean }>(({ active = false, theme }) => ({
+  label: "Scrubber-track",
+  position: "absolute",
+  top: 12,
+  left: 0,
+  right: 0,
+  height: 4,
+  backgroundColor: theme.palette.action.focus,
+
+  ...(!active && {
+    opacity: theme.palette.action.disabledOpacity,
+  }),
 }));
 
 const selectStartTime = (ctx: MessagePipelineContext) => ctx.playerState.activeData?.startTime;
@@ -117,7 +85,6 @@ export default function Scrubber(props: Props): JSX.Element {
   const presence = useMessagePipeline(selectPrecense);
   const ranges = useMessagePipeline(selectRanges);
 
-  const classes = useStyles();
   const setHoverValue = useSetHoverValue();
 
   const onChange = useCallback((value: number) => onSeek(fromSec(value)), [onSeek]);
@@ -149,14 +116,18 @@ export default function Scrubber(props: Props): JSX.Element {
       tooltipItems.push({ title: "Elapsed", value: `${toSec(timeFromStart).toFixed(9)} sec` });
 
       const tip = (
-        <div className={classes.tooltip}>
+        <TooltipWrapper>
           {tooltipItems.map((item) => (
-            <div key={item.title} className={classes.tooltipRow}>
-              <span className={classes.tooltipTitle}>{item.title}:</span>
-              <span className={classes.tooltipValue}>{item.value}</span>
-            </div>
+            <Fragment key={item.title}>
+              <Typography align="right" variant="body2">
+                {item.title}:
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {item.value}
+              </Typography>
+            </Fragment>
           ))}
-        </div>
+        </TooltipWrapper>
       );
       setTooltipState({ x, y, tip });
       setHoverValue({
@@ -165,7 +136,7 @@ export default function Scrubber(props: Props): JSX.Element {
         value: toSec(timeFromStart),
       });
     },
-    [latestStartTime, classes, setHoverValue, hoverComponentId, formatTime, timeFormat],
+    [latestStartTime, setHoverValue, hoverComponentId, formatTime, timeFormat],
   );
 
   const clearHoverValue = useClearHoverValue();
@@ -178,15 +149,12 @@ export default function Scrubber(props: Props): JSX.Element {
   // Clean up the hover value when we are unmounted -- important for storybook.
   useEffect(() => onHoverOut, [onHoverOut]);
 
-  const renderSlider = useCallback(
-    (val?: number) => {
-      if (val == undefined) {
-        return undefined;
-      }
-      return <div className={classes.marker} style={{ left: `calc(${val * 100}% - 2px)` }} />;
-    },
-    [classes.marker],
-  );
+  const renderSlider = useCallback((val?: number) => {
+    if (val == undefined) {
+      return undefined;
+    }
+    return <Marker style={{ left: `${val * 100}%` }} />;
+  }, []);
 
   const [tooltipState, setTooltipState] = useState<
     { x: number; y: number; tip: JSX.Element } | undefined
@@ -209,13 +177,19 @@ export default function Scrubber(props: Props): JSX.Element {
   const loading = presence === PlayerPresence.INITIALIZING || presence === PlayerPresence.BUFFERING;
 
   return (
-    <div className={classes.root}>
+    <Stack
+      direction="row"
+      flexGrow={1}
+      alignItems="center"
+      position="relative"
+      style={{ height: 28 }}
+    >
       {tooltip}
-      <div className={cx(classes.fullWidthBar, { [classes.fullWidthBarActive]: startTime })} />
-      <div className={classes.stateBar}>
+      <ScrubberTrack active={!!startTime} />
+      <Stack position="absolute" flex="auto" fullWidth style={{ zIndex: 1, height: 4 }}>
         <ProgressPlot loading={loading} availableRanges={ranges} />
-      </div>
-      <div ref={el} className={classes.sliderContainer}>
+      </Stack>
+      <Stack ref={el} fullHeight fullWidth position="absolute" flex={1} style={{ zIndex: 2 }}>
         <Slider
           min={min ?? 0}
           max={max ?? 100}
@@ -227,8 +201,8 @@ export default function Scrubber(props: Props): JSX.Element {
           onChange={onChange}
           renderSlider={renderSlider}
         />
-      </div>
+      </Stack>
       <PlaybackBarHoverTicks componentId={hoverComponentId} />
-    </div>
+    </Stack>
   );
 }
