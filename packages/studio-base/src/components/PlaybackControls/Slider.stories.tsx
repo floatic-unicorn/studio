@@ -12,33 +12,28 @@
 //   You may not use this file except in compliance with the License.
 
 import { styled as muiStyled } from "@mui/material";
+import { Box } from "@mui/system";
 import { Story } from "@storybook/react";
 import { useState } from "react";
 
 import Slider from "./Slider";
 
-const StyledRange = muiStyled("div", {
-  shouldForwardProp: (prop) => prop !== "width",
-})<{ width?: number }>`
-  position: absolute;
-  top: 40%;
-  left: 0;
-  background-color: #b3ecf9bd;
+const StyledRange = muiStyled("div")`
+  background-color: ${({ theme }) => theme.palette.info.dark};
+  border-radius: ${({ theme }) => theme.shape.borderRadius}px;
   height: 20%;
-  width: ${(props) => (props.width ?? 0) * 100}%;
-  border-radius: 2px;
+  left: 0;
+  position: absolute;
 `;
 
-const StyledMarker = muiStyled("div", {
-  shouldForwardProp: (prop) => prop !== "width",
-})<{ width?: number }>`
-  background-color: white;
-  position: absolute;
+const StyledMarker = muiStyled("div")`
+  background-color: ${({ theme }) => theme.palette.background.paper};
+  border: 1px solid;
+  border-color: ${({ theme }) => theme.palette.text.primary};
   height: 150%;
-  border: 1px solid rgba(0, 0, 0, 0.3);
-  width: 6px;
+  position: absolute;
   top: -25%;
-  left: ${(props) => (props.width ?? 0) * 100}%;
+  width: 6px;
 `;
 
 export default {
@@ -49,17 +44,17 @@ export const Examples: Story = () => {
   const [value, setValue] = useState(50);
   const [draggableValue, setDraggableValue] = useState(25);
   return (
-    <div style={{ margin: 50 }}>
+    <Box padding={4}>
       <p>standard (clickable)</p>
-      <div style={{ backgroundColor: "pink", height: 30, width: 300 }}>
+      <Box bgcolor="error.light" height={30} width={300}>
         <Slider min={10} max={200} onChange={(v) => setValue(v)} value={value} />
-      </div>
+      </Box>
       <p>disabled (not clickable)</p>
-      <div style={{ backgroundColor: "pink", height: 30, width: 300 }}>
+      <Box bgcolor="error.light" height={30} width={300}>
         <Slider disabled min={10} max={200} onChange={(v) => setValue(v)} value={value} />
-      </div>
+      </Box>
       <p>no value</p>
-      <div style={{ backgroundColor: "pink", height: 30, width: 300 }}>
+      <Box bgcolor="error.light" height={30} width={300}>
         <Slider
           min={10}
           max={200}
@@ -68,12 +63,12 @@ export const Examples: Story = () => {
           }}
           value={undefined}
         />
-      </div>
+      </Box>
       <p>draggable</p>
-      <div style={{ backgroundColor: "cornflowerblue", height: 20, width: 500 }}>
+      <Box bgcolor="info.main" height={20} width={500}>
         <Slider min={10} max={200} onChange={(v) => setDraggableValue(v)} value={draggableValue} />
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 };
 
@@ -81,22 +76,22 @@ export const CustomRenderer: Story = () => {
   const [draggableValue, setDraggableValue] = useState(25);
 
   return (
-    <div style={{ margin: 50 }}>
+    <Box padding={4}>
       <p>Customize slider UI using renderSlider</p>
-      <div style={{ backgroundColor: "cornflowerblue", height: 20, width: 500 }}>
+      <Box bgcolor="info.main" height={20} width={500}>
         <Slider
           min={10}
           max={200}
           onChange={(v) => setDraggableValue(v)}
           value={draggableValue}
           renderSlider={(width) => (
-            <div>
-              <StyledRange width={width} />
-              <StyledMarker width={width} />
-            </div>
+            <>
+              <StyledRange style={{ width: `${(width ?? 0) * 100}%` }} />
+              <StyledMarker style={{ left: `${(width ?? 0) * 100}%` }} />
+            </>
           )}
         />
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 };

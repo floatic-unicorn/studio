@@ -2,6 +2,7 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
+import { styled as muiStyled } from "@mui/material";
 import { clamp } from "lodash";
 import {
   useCallback,
@@ -12,7 +13,6 @@ import {
   useState,
   useLayoutEffect,
 } from "react";
-import styled from "styled-components";
 
 import Logger from "@foxglove/log";
 
@@ -30,28 +30,31 @@ type Props = {
   renderSlider?: (value?: number) => ReactNode;
 };
 
-const StyledSlider = styled.div<{ disabled?: boolean }>`
+const SliderRoot = muiStyled("div")<{ disabled?: boolean }>(
+  ({ disabled = false, theme }) => `
+  label: Slider-base;
   width: 100%;
   height: 100%;
   position: relative;
-  cursor: ${({ disabled = false }) => (disabled ? "not-allowed" : "pointer")};
-  border-radius: 2px;
-`;
+  cursor: ${disabled ? "not-allowed" : "pointer"};
+  display: flex;
+  align-items: center;
+  opacity: ${disabled ? theme.palette.action.disabledOpacity : 1};
+`,
+);
 
-const StyledRange = styled.div.attrs<{ width: number }>(({ width }) => ({
-  style: { width: `${width * 100}%` },
-}))<{ width: number }>`
-  background-color: rgba(255, 255, 255, 0.2);
+const StyledRange = muiStyled("div")`
+  label: Slider-range;
+  background-color: ${({ theme }) => theme.palette.action.active};
   position: absolute;
   height: 100%;
-  border-radius: 2px;
 `;
 
 function defaultRenderSlider(value: number | undefined): ReactNode {
   if (value == undefined || isNaN(value)) {
     return ReactNull;
   }
-  return <StyledRange width={value} />;
+  return <StyledRange style={{ width: `${value * 100}%` }} />;
 }
 
 export default function Slider(props: Props): JSX.Element {
@@ -174,7 +177,7 @@ export default function Slider(props: Props): JSX.Element {
   }, [mouseDown, onMouseMove, onMouseUp]);
 
   return (
-    <StyledSlider
+    <SliderRoot
       disabled={disabled}
       ref={elRef}
       onMouseDown={onMouseDown}
@@ -183,6 +186,6 @@ export default function Slider(props: Props): JSX.Element {
       onMouseLeave={onMouseLeave}
     >
       {renderSlider(sliderValue)}
-    </StyledSlider>
+    </SliderRoot>
   );
 }
