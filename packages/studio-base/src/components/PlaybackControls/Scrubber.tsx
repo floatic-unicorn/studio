@@ -32,14 +32,15 @@ const TooltipWrapper = muiStyled("div")(({ theme }) => ({
   whiteSpace: "nowrap",
   gap: theme.spacing(0.5),
   display: "grid",
-  gridTemplateColumns: "minmax(max-content, 50px) 1fr",
+  gridTemplateColumns: "auto 1fr",
   flexDirection: "column",
 }));
 
 const Marker = muiStyled("div")(({ theme }) => ({
   backgroundColor: theme.palette.text.primary,
   position: "absolute",
-  height: 12,
+  height: 8,
+  borderRadius: 1,
   width: 2,
   transform: "translate(-50%, 0)",
 }));
@@ -49,7 +50,6 @@ const ScrubberTrack = muiStyled("div", {
 })<{ active?: boolean }>(({ active = false, theme }) => ({
   label: "Scrubber-track",
   position: "absolute",
-  top: 12,
   left: 0,
   right: 0,
   height: 4,
@@ -186,10 +186,11 @@ export default function Scrubber(props: Props): JSX.Element {
     >
       {tooltip}
       <ScrubberTrack active={!!startTime} />
-      <Stack position="absolute" flex="auto" fullWidth style={{ zIndex: 1, height: 4 }}>
+      <Stack position="absolute" flex="auto" fullWidth style={{ height: 4 }}>
         <ProgressPlot loading={loading} availableRanges={ranges} />
       </Stack>
-      <Stack ref={el} fullHeight fullWidth position="absolute" flex={1} style={{ zIndex: 2 }}>
+      <PlaybackBarHoverTicks componentId={hoverComponentId} />
+      <Stack ref={el} fullHeight fullWidth position="absolute" flex={1}>
         <Slider
           min={min ?? 0}
           max={max ?? 100}
@@ -202,7 +203,6 @@ export default function Scrubber(props: Props): JSX.Element {
           renderSlider={renderSlider}
         />
       </Stack>
-      <PlaybackBarHoverTicks componentId={hoverComponentId} />
     </Stack>
   );
 }

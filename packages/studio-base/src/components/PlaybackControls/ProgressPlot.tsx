@@ -44,7 +44,6 @@ const LoadingIndicator = muiStyled("div")(({ theme }) => ({
     `transparent ${STRIPE_WIDTH / 2}px`,
     `transparent ${STRIPE_WIDTH}px`,
   ].join(",")})`,
-  zIndex: 1,
 }));
 
 const Range = muiStyled("div")(({ theme }) => ({
@@ -52,7 +51,6 @@ const Range = muiStyled("div")(({ theme }) => ({
   position: "absolute",
   backgroundColor: theme.palette.text.secondary,
   height: "100%",
-  zIndex: 2,
 }));
 
 export function ProgressPlot(props: ProgressProps): JSX.Element {
