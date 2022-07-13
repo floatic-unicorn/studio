@@ -481,13 +481,6 @@ export class IterablePlayer implements Player {
   // Without an initial read, the user would be looking at a blank layout since no messages have yet
   // been delivered.
   private async _stateStartPlay() {
-    // Indicate the player is buffering
-    this._presence = PlayerPresence.BUFFERING;
-    await this._emitState();
-    if (this._nextState) {
-      return;
-    }
-
     const stopTime = clampTime(
       add(this._start, fromNanoSec(SEEK_ON_START_NS)),
       this._start,
@@ -511,32 +504,42 @@ export class IterablePlayer implements Player {
 
     const messageEvents: MessageEvent<unknown>[] = [];
 
-    for (;;) {
-      const result = await this._playbackIterator.next();
-      if (result.done === true) {
-        break;
-      }
-      const iterResult = result.value;
-      // Bail if a new state is requested while we are loading messages
-      // This usually happens when seeking before the initial load is complete
+    // If we take too long to read the data, we set the player into a BUFFERING presence. This
+    // indicates that the player is waiting to load more data.
+    let tickEmit: Promise<void> | undefined;
+    const tickTimeout = setTimeout(() => {
+      this._presence = PlayerPresence.BUFFERING;
+      tickEmit = this._emitState();
+    }, 100);
 
-      // Eslint doesn't understand that this._nextState could change
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
-      if (this._nextState) {
-        return;
-      }
+    try {
+      for (;;) {
+        const result = await this._playbackIterator.next();
+        if (result.done === true) {
+          break;
+        }
+        const iterResult = result.value;
+        // Bail if a new state is requested while we are loading messages
+        // This usually happens when seeking before the initial load is complete
+        if (this._nextState) {
+          return;
+        }
 
-      if (iterResult.problem) {
-        this._problemManager.addProblem(`connid-${iterResult.connectionId}`, iterResult.problem);
-        continue;
-      }
+        if (iterResult.problem) {
+          this._problemManager.addProblem(`connid-${iterResult.connectionId}`, iterResult.problem);
+          continue;
+        }
 
-      if (compare(iterResult.msgEvent.receiveTime, stopTime) > 0) {
-        this._lastMessage = iterResult.msgEvent;
-        break;
-      }
+        if (compare(iterResult.msgEvent.receiveTime, stopTime) > 0) {
+          this._lastMessage = iterResult.msgEvent;
+          break;
+        }
 
-      messageEvents.push(iterResult.msgEvent);
+        messageEvents.push(iterResult.msgEvent);
+      }
+    } finally {
+      clearTimeout(tickTimeout);
+      await tickEmit;
     }
 
     this._currentTime = stopTime;
@@ -544,8 +547,6 @@ export class IterablePlayer implements Player {
     this._presence = PlayerPresence.PRESENT;
     await this._emitState();
 
-    // Eslint doesn't understand that this._nextState could change
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
     if (this._nextState) {
       return;
     }
