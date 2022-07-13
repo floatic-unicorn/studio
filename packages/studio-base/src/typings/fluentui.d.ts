@@ -6,8 +6,9 @@ import { IStyleFunctionOrObject, IIconStyleProps, IIconStyles } from "@fluentui/
 
 // Restrict TS types for icons to allow only the icon names we've registered.
 declare global {
+  type CustomIconNames = "studio.ROS";
   type RegisteredIconNames =
-    | "studio.ROS"
+    | CustomIconNames
     | "Add"
     | "AddIn"
     | "Blockhead"
