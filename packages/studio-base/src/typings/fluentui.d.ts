@@ -2,7 +2,12 @@
 // License, v2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
-import { IStyleFunctionOrObject, IIconStyleProps, IIconStyles } from "@fluentui/react";
+import {
+  IStyleFunctionOrObject,
+  IIconStyleProps,
+  IIconStyles,
+  RegisteredIconNames,
+} from "@fluentui/react";
 
 // Restrict TS types for icons to allow only the icon names we've registered.
 declare global {
@@ -17,12 +22,14 @@ declare global {
     | "Cancel"
     | "CaretSolidDown"
     | "CheckMark"
+    | "ChevronDown"
     | "ChevronDownSmall"
     | "ChevronLeft"
+    | "ChevronRight"
     | "CircleHalfFill"
+    | "Clear"
     | "Clipboard"
     | "ClipboardList"
-    | "GenericScan"
     | "Close"
     | "DatabaseSettings"
     | "Delete"
@@ -34,6 +41,8 @@ declare global {
     | "FiveTileGrid"
     | "Flow"
     | "FullScreenMaximize"
+    | "GenericScan"
+    | "Info"
     | "MenuDown"
     | "MoreVertical"
     | "OpenFile"
