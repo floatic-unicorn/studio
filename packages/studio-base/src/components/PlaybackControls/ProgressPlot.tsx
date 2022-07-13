@@ -10,10 +10,11 @@
 //   This source code is licensed under the Apache License, Version 2.0,
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
-import { keyframes, styled as muiStyled, useTheme } from "@mui/material";
+import { keyframes, styled as muiStyled } from "@mui/material";
 import { simplify } from "intervals-fn";
 import { useMemo } from "react";
 
+import Stack from "@foxglove/studio-base/components/Stack";
 import { Range } from "@foxglove/studio-base/util/ranges";
 
 type ProgressProps = {
@@ -21,35 +22,41 @@ type ProgressProps = {
   availableRanges?: Range[];
 };
 
+const STRIPE_WIDTH = 8;
+
 const animatedBackground = keyframes`
-  0% {
-    background-position: 0 0;
-  }
-  100% {
-    background-position: 18px 0;
-  }
+  0% { background-position: 0 0; }
+  100% { background-position: ${STRIPE_WIDTH * 2}px 0; }
 `;
 
-const AnimatedProgress = muiStyled("div")(({ theme }) => ({
+const LoadingIndicator = muiStyled("div")(({ theme }) => ({
+  label: "ProgressPlot-loadingIndicator",
   position: "absolute",
   width: "100%",
   height: "100%",
-  animation: `${animatedBackground} 1s linear infinite`,
+  animation: `${animatedBackground} 300ms linear infinite`,
   backgroundRepeat: "repeat-x",
-  backgroundSize: "100vw 100%",
-  backgroundColor: theme.palette.grey[400],
+  backgroundSize: `${STRIPE_WIDTH * 2}px 100%`,
   backgroundImage: `repeating-linear-gradient(${[
     "90deg",
-    `${theme.palette.grey[300]}`,
-    `${theme.palette.grey[300]} 3px`,
-    `transparent 3px`,
-    `transparent 9px`,
+    `${theme.palette.background.paper}`,
+    `${theme.palette.background.paper} ${STRIPE_WIDTH / 2}px`,
+    `transparent ${STRIPE_WIDTH / 2}px`,
+    `transparent ${STRIPE_WIDTH}px`,
   ].join(",")})`,
+  zIndex: 1,
+}));
+
+const Range = muiStyled("div")(({ theme }) => ({
+  label: "ProgressPlot-range",
+  position: "absolute",
+  backgroundColor: theme.palette.text.secondary,
+  height: "100%",
+  zIndex: 2,
 }));
 
 export function ProgressPlot(props: ProgressProps): JSX.Element {
   const { availableRanges, loading } = props;
-  const theme = useTheme();
 
   const ranges = useMemo(() => {
     if (!availableRanges) {
@@ -65,24 +72,15 @@ export function ProgressPlot(props: ProgressProps): JSX.Element {
       }
 
       return (
-        <div
-          key={idx}
-          style={{
-            position: "absolute",
-            backgroundColor: theme.palette.grey[600],
-            left: `${range.start * 100}%`,
-            width: `${width * 100}%`,
-            height: "100%",
-          }}
-        />
+        <Range key={idx} style={{ width: `${width * 100}%`, left: `${range.start * 100}%` }} />
       );
     });
-  }, [availableRanges, theme.palette.grey]);
+  }, [availableRanges]);
 
   return (
-    <div style={{ position: "relative", height: "100%" }}>
-      {loading && <AnimatedProgress />}
+    <Stack position="relative" fullHeight>
+      {loading && <LoadingIndicator />}
       {ranges}
-    </div>
+    </Stack>
   );
 }
